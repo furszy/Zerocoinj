@@ -9,6 +9,13 @@ The Zerocoin protocol is secure and uses well-studied cryptographic primitives. 
 
 * [Zerocoin Paper](http://zerocoin.org/media/pdf/ZerocoinOakland.pdf)
 
+## Usage
+
+The library was designed and coded for the PIVX blockchain as part of the Zerocoin Light Node Protocol.
+
+- PIVX website (http://www.pivx.org)
+- light/mobile wallet privacy using the [Zerocoin Light Node Protocol](https://pivx.org/wp-content/uploads/2018/11/Zerocoin_Light_Node_Protocol.pdf)
+
 
 ## WARNING
 

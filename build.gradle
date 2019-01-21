@@ -1,0 +1,283 @@
+
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+        jcenter()
+
+    }
+}
+
+plugins {
+    id 'java'
+    id 'idea'
+    id 'application'
+    id 'cpp'
+}
+
+group 'p'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+mainClassName = 'com.zerocoinj.tests.Application'
+
+idea {
+    module {
+        inheritOutputDirs = false
+        outputDir = file("$buildDir/classes/main/")
+    }
+}
+
+repositories {
+    mavenCentral()
+    jcenter()
+    google()
+    maven { url 'https://jitpack.io' }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+        resources {
+            srcDir 'src/main/resources'
+        }
+    }
+    test {
+        java {
+            srcDirs 'src/test/java'
+        }
+        resources {
+            srcDirs 'src/test/resources'
+            includes ['**/*.txt']
+        }
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+                'Class-Path': configurations.compile.collect { it.getName() }.join(' '),
+                'Main-Class': mainClassName
+        )
+    }
+}
+
+run {
+    systemProperty "java.library.path", file("${buildDir}/libs/bridge/shared/debug/").absolutePath
+}
+
+test {
+    jvmArgs += [ "-Xmx1024M" ]
+    systemProperty "java.library.path", file("${buildDir}/libs/bridge/shared/debug/").absolutePath
+}
+
+println "Building on OS: " + System.properties['os.name']
+println "Using JDK: " + System.properties['java.home']
+
+def SYS_INCLUDE_DIR = this.properties['system.include.dir']
+def SYS_LOCAL_INCLUDE_DIR = this.properties['system.local.include.dir']
+def JNI_INCLUDE_DIR = this.properties['jni.include.dir']
+def JNI_LIB_DIR = this.properties['jni.lib.dir']
+def OPEN_SSL_LIB = this.properties['system.local.include.openssl.dir']
+
+println "Using system include directory: " + SYS_INCLUDE_DIR
+println "Using system local include directory: " + SYS_LOCAL_INCLUDE_DIR
+println "Using JNI include directory: " + JNI_INCLUDE_DIR
+println "Using JNI lib directory: " + JNI_LIB_DIR
+
+// TODO: Complete this for the others OS.
+model {
+    repositories {
+        libs(PrebuiltLibraries) {
+            boost{
+                binaries.withType(SharedLibraryBinary) {
+                    sharedLibraryFile = file("libs/libboost_thread-mt.dylib")
+                }
+            }
+            boost_system{
+                binaries.withType(SharedLibraryBinary) {
+                    sharedLibraryFile = file("libs/libboost_system.dylib")
+                }
+            }
+            crypto {
+                //headers.srcDir "3rd-party-lib/util/src/util/headers"
+                //binaries.withType(StaticLibraryBinary) {
+                //    def libName = targetPlatform.operatingSystem.windows ? 'util.lib' : 'libutil.a'
+                //    staticLibraryFile = file("3rd-party-lib/util/build/libs/util/static/${buildType.name}/${libName}")
+                //}
+                binaries.withType(SharedLibraryBinary) {
+                    def os = targetPlatform.operatingSystem
+                    //def baseDir = "3rd-party-lib/util/build/libs/util/shared/${buildType.name}"
+                    sharedLibraryFile = file("libs/libcrypto.1.0.0.dylib")
+                    // TODO: Complete this..
+//                    if (os.windows) {
+//                        // Windows uses a .dll file, with a different link file if it exists (not Cygwin or MinGW)
+//                        sharedLibraryFile = file("${baseDir}/util.dll")
+//                        if (file("${baseDir}/util.lib").exists()) {
+//                            sharedLibraryLinkFile = file("${baseDir}/util.lib")
+//                        }
+//                    } else if (os.macOsX) {
+//                        sharedLibraryFile = file("${baseDir}/libutil.dylib")
+//                    } else {
+//                        sharedLibraryFile = file("${baseDir}/libutil.so")
+//                    }
+                }
+            }
+        }
+    }
+
+
+    components {
+        bridge(NativeLibrarySpec) {
+            sources {
+                cpp {
+                    source {
+                        srcDir 'src/main/jni'
+                        include "**/*.cpp"
+                    }
+                }
+                //cpp.lib library: 'boost', linkage: 'api'
+                cpp.lib library: 'crypto', linkage: 'shared'
+                cpp.lib library: 'boost', linkage: 'shared'
+                cpp.lib library: 'boost_system', linkage: 'shared'
+            }
+            buildTypes {
+                debug
+                release
+            }
+        }
+    }
+    toolChains {
+        gcc(Gcc) {
+            eachPlatform {
+                if (System.properties['os.name'].equals('Mac OS X')) {
+                    println "Using gcc"
+                    cppCompiler.withArguments { args ->
+                        args << "-O2"
+                        args << "-I" + SYS_INCLUDE_DIR
+                        args << "-I" + SYS_LOCAL_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR + "/darwin"
+                        args << "-L" + OPEN_SSL_LIB
+                        args << "-I" + this.properties['system.local.include.openssl.dir2']
+                        args << "-L/usr/local/opt/openssl/lib"
+                        args << "-I/usr/local/opt/openssl/include"
+                        args << "-I/usr/local/Cellar/openssl/1.0.2o_1/lib/"
+                        args << "-L" + this.properties['system.local.lib.boost.dir']
+                        args << "-I" + this.properties['system.local.include.boost.dir']
+                        args << "-std=c++11"
+                    }
+                    linker.withArguments { args ->
+                        args << "-O2"
+                        args << "-lc++"
+                        args << "lcrypto"
+                        args << "-L" + this.properties['system.local.include.openssl.dir2']
+                        args << "-L/usr/local/opt/openssl/lib"
+                        args << "-I/usr/local/opt/openssl/include"
+                        args << "-I/usr/local/Cellar/openssl/1.0.2o_1/lib/"
+                        args << "-L" + this.properties['system.local.lib.boost.dir']
+                        args << "-I" + this.properties['system.local.include.boost.dir']
+                        args << "lboost"
+                        args << "-L" + OPEN_SSL_LIB
+                    }
+                } else {
+                    path "/opt/rh/devtoolset-2/root/usr/bin/gcc"
+                    cppCompiler.withArguments { args ->
+                        args << "-O2"
+                        args << "-I" + SYS_INCLUDE_DIR
+                        args << "-I" + SYS_LOCAL_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR + "/linux"
+                        args << "-std=c++11"
+                    }
+                    linker.withArguments { args ->
+                        args << "-O2"
+                        args << "-lstdc++"
+                    }
+                }
+            }
+        }
+        clang(Clang) {
+            eachPlatform {
+                if (System.properties['os.name'].equals('Mac OS X')) {
+                    println "using clang.."
+                    cppCompiler.withArguments { args ->
+                        args << "-O2"
+                        args << "-I" + SYS_INCLUDE_DIR
+                        args << "-I" + SYS_LOCAL_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR + "/darwin"
+                        args << "-L" + OPEN_SSL_LIB
+                        args << "-I" + this.properties['system.local.include.openssl.dir2']
+                        args << "-L/usr/local/opt/openssl/lib"
+                        args << "-I/usr/local/opt/openssl/include"
+                        args << "-I/usr/local/Cellar/openssl/1.0.2o_1/lib/"
+                        args << "-L" + this.properties['system.local.lib.boost.dir']
+                        args << "-I" + this.properties['system.local.include.boost.dir']
+                        args << "-std=c++11"
+                    }
+                    linker.withArguments { args ->
+                        args << "-O2"
+                        args << "-lc++"
+                        args << "-L" + this.properties['system.local.include.openssl.dir2']
+                        args << "-L/usr/local/opt/openssl/lib"
+                        args << "-I/usr/local/opt/openssl/include"
+                        args << "-I/usr/local/Cellar/openssl/1.0.2o_1/lib/"
+                        args << "-L" + OPEN_SSL_LIB
+                        args << "-L" + this.properties['system.local.lib.boost.dir']
+                        args << "-I" + this.properties['system.local.include.boost.dir']
+                    }
+                } else {
+                    cppCompiler.withArguments { args ->
+                        args << "-O2"
+                        args << "-I" + SYS_INCLUDE_DIR
+                        args << "-I" + SYS_LOCAL_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR
+                        args << "-I" + JNI_INCLUDE_DIR + "/linux"
+                        args << "-std=c++11"
+                    }
+                    linker.withArguments { args ->
+                        args << "-O2"
+                        args << "-lstdc++"
+                    }
+                }
+            }
+        }
+    }
+}
+
+task copyLibBridge(type: Copy) {
+    if (System.properties['os.name'].equals('Mac OS X')) {
+        from "$projectDir/build/binaries/bridgeSharedLibrary/libbridge.dylib"
+    }
+    else {
+        from "$projectDir/build/binaries/bridgeSharedLibrary/libbridge.so"
+    }
+    into 'libs'
+}
+
+dependencies {
+    implementation 'org.slf4j:slf4j-simple:1.7.5'
+    implementation 'org.slf4j:slf4j-api:1.7.20'
+    implementation 'com.lambdaworks:scrypt:1.4.0'
+    implementation 'com.google.protobuf:protobuf-java:2.6.1'
+    implementation 'com.google.guava:guava:20.0'
+    implementation 'com.squareup.okhttp:okhttp:2.7.5'
+    implementation 'commons-codec:commons-codec:1.10'
+    implementation 'com.madgag.spongycastle:core:1.54.0.0'
+    implementation 'org.fusesource.leveldbjni:leveldbjni-all:1.8'
+    implementation files('libs/pivxj-core-0.14.3-12.1.jar')
+    implementation group: 'org.json', name: 'json', version: '20180130'
+    testCompile "junit:junit:4.11"
+    testCompile 'org.slf4j:slf4j-api:1.7.20'
+}
+
+
+
+tasks.withType(JavaExec) {
+    systemProperty "java.library.path", file("${buildDir}/libs/bridge/shared/debug/").absolutePath
+}
+
